@@ -39,7 +39,7 @@ Create one Key Value instance and one Go web service in the same region. Set the
 
 - Build: `go build -o bin/web-key-value .`
 - Start: `./bin/web-key-value`
-- Source branch: `matteo/initial`
+- Source branch: `main`
 
 The app stores entries as fields in a single Redis hash named `web-key-value`. Listing reads that whole hash and sorts it in memory, intentionally suited to a small demo. Each write is one atomic Redis command. There are no expirations.
 
