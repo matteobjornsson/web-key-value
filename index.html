@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Key Value</title>
+<style>
+  body { font: 16px system-ui, sans-serif; max-width: 860px; margin: 48px auto; padding: 0 20px; color: #222; }
+  h1 { margin-bottom: 4px; }
+  p { color: #555; }
+  label { display: block; margin-top: 14px; }
+  input, textarea, button { font: inherit; padding: 8px; }
+  input, textarea { box-sizing: border-box; width: 100%; border: 1px solid #aaa; border-radius: 4px; }
+  button { cursor: pointer; margin: 8px 6px 0 0; }
+  button:disabled { cursor: default; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; table-layout: fixed; }
+  th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #ddd; overflow-wrap: anywhere; vertical-align: top; }
+  td:nth-child(2) { white-space: pre-wrap; }
+  th:first-child { width: 24%; } th:last-child { width: 24%; }
+  #message { min-height: 1.5em; } .error { color: #a11; }
+</style>
+<h1>Web Key Value</h1>
+<p>Read anything. Enter the write secret to save or delete.</p>
+<form id="editor">
+  <label for="secret">Write secret</label>
+  <input id="secret" type="password" autocomplete="off" placeholder="Required for changes">
+  <label for="key">Key</label>
+  <input id="key" required maxlength="128" pattern="[a-zA-Z0-9_\-][a-zA-Z0-9._\-]{0,127}" placeholder="e.g. greeting">
+  <label for="value">Value</label>
+  <textarea id="value" rows="3" placeholder="Any text, including an empty value"></textarea>
+  <button>Save value</button>
+</form>
+<p id="message" role="status" aria-live="polite"></p>
+<h2>Stored values</h2>
+<button id="refresh" type="button">Refresh</button>
+<table>
+  <thead><tr><th>Key</th><th>Value</th><th>Actions</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<button id="previous" type="button" disabled>Previous</button>
+<button id="next" type="button" disabled>Next</button>
+<span id="page"></span>
+<script>
+  const $ = id => document.getElementById(id);
+  let cursors = [''], position = 0, next = '';
+  function message(text, error = false) {
+    $('message').textContent = text;
+    $('message').className = error ? 'error' : '';
+  }
+  async function request(path, options = {}) {
+    const response = await fetch(path, options);
+    if (!response.ok) throw new Error(await response.text());
+    return response;
+  }
+  async function load() {
+    const response = await request('/api/keys?limit=10&after=' + encodeURIComponent(cursors[position]));
+    const data = await response.json();
+    $('rows').replaceChildren();
+    for (const item of data.items) {
+      const row = $('rows').insertRow();
+      row.insertCell().textContent = item.key;
+      row.insertCell().textContent = item.value;
+      const actions = row.insertCell();
+      for (const label of ['Edit', 'Delete']) {
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.onclick = () => {
+          if (label === 'Edit') {
+            $('key').value = item.key;
+            $('value').value = item.value;
+            $('value').focus();
+          } else if (confirm('Delete "' + item.key + '"?')) {
+            change('DELETE', item.key);
+          }
+        };
+        actions.append(button);
+      }
+    }
+    if (!data.items.length) {
+      const cell = $('rows').insertRow().insertCell();
+      cell.colSpan = 3;
+      cell.textContent = 'No values on this page.';
+    }
+    next = data.next;
+    $('previous').disabled = position === 0;
+    $('next').disabled = !next;
+    $('page').textContent = 'Page ' + (position + 1);
+  }
+  async function change(method, key, body) {
+    try {
+      if (!$('secret').value) throw new Error('Enter the write secret first.');
+      await request('/api/keys/' + encodeURIComponent(key), {
+        method, body,
+        headers: {'Authorization': 'Bearer ' + $('secret').value, 'Content-Type': 'text/plain; charset=utf-8'}
+      });
+      cursors = ['']; position = 0;
+      await load();
+      message(method === 'PUT' ? 'Saved ' + key : 'Deleted ' + key);
+    } catch (error) { message(error.message, true); }
+  }
+  function refresh() { load().catch(error => message(error.message, true)); }
+  $('editor').onsubmit = event => {
+    event.preventDefault();
+    change('PUT', $('key').value, $('value').value);
+  };
+  $('refresh').onclick = () => { cursors = ['']; position = 0; refresh(); };
+  $('previous').onclick = () => { position--; refresh(); };
+  $('next').onclick = () => { cursors = cursors.slice(0, position + 1); cursors.push(next); position++; refresh(); };
+  refresh();
+</script>
+</html>
