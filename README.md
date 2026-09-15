@@ -16,7 +16,7 @@ Open http://localhost:8080. Set `PORT` to use another port. Enter your write sec
 
 | Request | Result |
 | --- | --- |
-| `GET /api/keys?limit=10&after=key` | JSON `{ "items": [{ "key": "…", "value": "…" }], "next": "…" }` |
+| `GET /api/keys?limit=10&after=cursor` | JSON `{ "items": [{ "key": "…", "value": "…" }], "next": "…" }` |
 | `GET /api/keys/{key}` | Plain-text value, or 404 |
 | `PUT /api/keys/{key}` | Set the plain-text request body; 201 if new, 204 if replaced |
 | `DELETE /api/keys/{key}` | Delete; 204 even if already absent |
@@ -24,7 +24,7 @@ Open http://localhost:8080. Set `PORT` to use another port. Enter your write sec
 
 PUT and DELETE require `Authorization: Bearer YOUR_WRITE_SECRET`. Missing or incorrect secrets return 401. Keys contain 1–128 ASCII letters, digits, dots, underscores or hyphens, with no leading dot. Values are UTF-8 text, up to 16 KiB; empty values are valid. PATCH is not supported because each write replaces one complete string.
 
-Pagination is alphabetical, with 1–100 entries per page. Pass the returned `next` as `after`; an empty `next` means the end. Pages reflect the current data rather than a snapshot.
+Pagination is newest update first, with 1–100 entries per page and alphabetical ordering for ties. Entries saved before timestamp tracking sort last until updated. Pass the returned `next` as the URL-encoded `after` parameter; an empty `next` means the end. The cursor includes the update time and key. Pages reflect current data rather than a snapshot, so a key updated during pagination moves ahead of the cursor and is visible when you refresh from the first page.
 
 ```sh
 curl "$BASE_URL/api/keys"
@@ -41,7 +41,7 @@ Create one Key Value instance and one Go web service in the same region. Set the
 - Start: `./bin/web-key-value`
 - Source branch: `main`
 
-The app stores entries as fields in a single Redis hash named `web-key-value`. Listing reads that whole hash and sorts it in memory, intentionally suited to a small demo. Each write is one atomic Redis command. There are no expirations.
+The app stores values in a Redis hash named `web-key-value` and update timestamps in `web-key-value-updated`, in the same Key Value instance. Writes and deletes update both hashes in a transaction. Listing reads both hashes in a transaction and sorts in memory, intentionally suited to a small demo. There are no expirations.
 
 Data survives a web-service redeploy because it lives in Key Value. A free Render Key Value instance has no disk persistence: restarting or upgrading that instance can lose the data. This is a disposable demo, not a durable database service.
 

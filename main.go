@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -24,6 +25,7 @@ var index string
 var keyPattern = regexp.MustCompile(`^[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,127}$`)
 
 const hash = "web-key-value"
+const updatedHash = "web-key-value-updated"
 
 type item struct {
 	Key   string `json:"key"`
@@ -35,18 +37,25 @@ type page struct {
 	Next  string `json:"next"`
 }
 
-func paginate(values map[string]string, after string, limit int) page {
+func paginate(values, updated map[string]string, after string, limit int) page {
+	afterTime, afterKey, _ := strings.Cut(after, "|")
 	keys := make([]string, 0, len(values))
 	for key := range values {
-		if key > after {
+		if after == "" || updated[key] < afterTime || (updated[key] == afterTime && key > afterKey) {
 			keys = append(keys, key)
 		}
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		if updated[keys[i]] != updated[keys[j]] {
+			return updated[keys[i]] > updated[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
 	result := page{Items: []item{}}
 	if len(keys) > limit {
 		keys = keys[:limit]
-		result.Next = keys[len(keys)-1]
+		last := keys[len(keys)-1]
+		result.Next = updated[last] + "|" + last
 	}
 	for _, key := range keys {
 		result.Items = append(result.Items, item{key, values[key]})
@@ -81,13 +90,15 @@ func handler(db *redis.Client, secret string) http.Handler {
 				return
 			}
 		}
-		values, err := db.HGetAll(r.Context(), hash).Result()
-		if err != nil {
+		pipe := db.TxPipeline()
+		values := pipe.HGetAll(r.Context(), hash)
+		updated := pipe.HGetAll(r.Context(), updatedHash)
+		if _, err := pipe.Exec(r.Context()); err != nil {
 			fail(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(paginate(values, r.URL.Query().Get("after"), limit))
+		json.NewEncoder(w).Encode(paginate(values.Val(), updated.Val(), r.URL.Query().Get("after"), limit))
 	})
 	mux.HandleFunc("/api/keys/{key}", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" && r.Method != "PUT" && r.Method != "DELETE" {
@@ -131,17 +142,23 @@ func handler(db *redis.Client, secret string) http.Handler {
 				http.Error(w, "value must be UTF-8 text", http.StatusBadRequest)
 				return
 			}
-			created, err := db.HSet(r.Context(), hash, key, string(body)).Result()
-			if err != nil {
+			pipe := db.TxPipeline()
+			created := pipe.HSet(r.Context(), hash, key, string(body))
+			// Fixed-width UTC timestamps sort chronologically as strings.
+			pipe.HSet(r.Context(), updatedHash, key, time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z"))
+			if _, err := pipe.Exec(r.Context()); err != nil {
 				fail(w, err)
-			} else if created == 1 {
+			} else if created.Val() == 1 {
 				w.Header().Set("Location", r.URL.Path)
 				w.WriteHeader(http.StatusCreated)
 			} else {
 				w.WriteHeader(http.StatusNoContent)
 			}
 		case "DELETE":
-			if err := db.HDel(r.Context(), hash, key).Err(); err != nil {
+			pipe := db.TxPipeline()
+			pipe.HDel(r.Context(), hash, key)
+			pipe.HDel(r.Context(), updatedHash, key)
+			if _, err := pipe.Exec(r.Context()); err != nil {
 				fail(w, err)
 			} else {
 				w.WriteHeader(http.StatusNoContent)
