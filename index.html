@@ -24,7 +24,8 @@
   <label for="secret">Write secret</label>
   <input id="secret" type="password" autocomplete="off" placeholder="Required for changes">
   <label for="key">Key</label>
-  <input id="key" required maxlength="128" pattern="[a-zA-Z0-9_\-][a-zA-Z0-9._\-]{0,127}" placeholder="e.g. greeting">
+  <input id="key" required maxlength="128" pattern="[a-zA-Z0-9_\-][a-zA-Z0-9._\-]{0,127}" aria-describedby="key-format">
+  <small id="key-format">1–128 characters: A–Z, a–z, 0–9, dots, underscores, or hyphens. No spaces or leading dot.</small>
   <label for="value">Value</label>
   <textarea id="value" rows="3" placeholder="Any text, including an empty value"></textarea>
   <button>Save value</button>
