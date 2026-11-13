@@ -35,7 +35,7 @@ curl -X DELETE -H "Authorization: Bearer $WRITE_SECRET" "$BASE_URL/api/keys/gree
 
 ## Deploy to Render
 
-Create a Blueprint from this repository using `render.yaml`. It provisions a Go web service (`0.5c-512mb`) and a Key Value instance (`256mb`) in Oregon, grouped under the `web-key-value` project and `production` environment. Key Value uses journal-plus-snapshot persistence, the `noeviction` memory policy, and no external access. The web service receives its internal connection URL automatically.
+Create a Blueprint from this repository using `render.yaml`. It provisions a Free Go web service and a Free Key Value instance in Oregon, grouped under the `web-key-value` project and `production` environment. Key Value uses the `noeviction` memory policy and no external access. The web service receives its internal connection URL automatically.
 
 Render generates `WRITE_SECRET` during setup. Copy it from the web service's **Environment** page in the Render Dashboard and enter it in the app to save or delete values. Anyone you share the secret with can write. The secret is preserved across Blueprint syncs.
 
@@ -48,7 +48,7 @@ Commits to `main` automatically deploy the web service.
 
 The app stores values in a Redis hash named `web-key-value` and update timestamps in `web-key-value-updated`, in the same Key Value instance. Writes and deletes update both hashes in a transaction. Listing reads both hashes in a transaction and sorts in memory, intentionally suited to a small demo. There are no expirations.
 
-Data survives a web-service redeploy because it lives in Key Value. Journal-plus-snapshot persistence also preserves data across Key Value restarts, though a failure can lose up to the last second of writes. Listing loads all entries into memory, so keep this app's dataset small.
+Data survives a web-service redeploy because it lives in Key Value. Free Key Value has no persistence: restarting or upgrading that instance loses its data. The Free web service sleeps after 15 minutes without traffic and takes about a minute to wake up. Listing loads all entries into memory, so keep this app's dataset small.
 
 ## Checks
 

@@ -7,7 +7,7 @@ projects:
             name: web-key-value
             runtime: go
             region: oregon
-            plan: 0.5c-512mb
+            plan: free
             branch: main
             buildCommand: go build -o bin/web-key-value .
             startCommand: ./bin/web-key-value
@@ -17,15 +17,15 @@ projects:
               - key: REDIS_URL
                 fromService:
                   type: keyvalue
-                  name: web-key-value-store
+                  name: web-key-value-store-free
                   property: connectionString
               - key: WRITE_SECRET
                 generateValue: true
 
           - type: keyvalue
-            name: web-key-value-store
+            name: web-key-value-store-free
             region: oregon
-            plan: 256mb
+            plan: free
             maxmemoryPolicy: noeviction
-            persistenceMode: journal-snapshot
+            persistenceMode: "off"
             ipAllowList: []
