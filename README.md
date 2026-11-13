@@ -35,15 +35,20 @@ curl -X DELETE -H "Authorization: Bearer $WRITE_SECRET" "$BASE_URL/api/keys/gree
 
 ## Deploy to Render
 
-Create one Key Value instance and one Go web service in the same region. Set the web service's `REDIS_URL` to the Key Value instance's internal connection URL and `WRITE_SECRET` to your chosen secret. Keep external Key Value access disabled and use the `noeviction` memory policy.
+Create a Blueprint from this repository using `render.yaml`. It provisions a Go web service (`0.5c-512mb`) and a Key Value instance (`256mb`) in Oregon, grouped under the `web-key-value` project and `production` environment. Key Value uses journal-plus-snapshot persistence, the `noeviction` memory policy, and no external access. The web service receives its internal connection URL automatically.
+
+Render generates `WRITE_SECRET` during setup. Copy it from the web service's **Environment** page in the Render Dashboard and enter it in the app to save or delete values. Anyone you share the secret with can write. The secret is preserved across Blueprint syncs.
 
 - Build: `go build -o bin/web-key-value .`
 - Start: `./bin/web-key-value`
 - Source branch: `main`
+- Health check: `/healthz`
+
+Commits to `main` automatically deploy the web service.
 
 The app stores values in a Redis hash named `web-key-value` and update timestamps in `web-key-value-updated`, in the same Key Value instance. Writes and deletes update both hashes in a transaction. Listing reads both hashes in a transaction and sorts in memory, intentionally suited to a small demo. There are no expirations.
 
-Data survives a web-service redeploy because it lives in Key Value. A free Render Key Value instance has no disk persistence: restarting or upgrading that instance can lose the data. This is a disposable demo, not a durable database service.
+Data survives a web-service redeploy because it lives in Key Value. Journal-plus-snapshot persistence also preserves data across Key Value restarts, though a failure can lose up to the last second of writes. Listing loads all entries into memory, so keep this app's dataset small.
 
 ## Checks
 
